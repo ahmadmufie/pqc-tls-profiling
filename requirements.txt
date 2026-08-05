@@ -1,0 +1,7 @@
+cryptography
+asn1crypto
+psutil
+scapy
+pandas
+matplotlib
+pytest
