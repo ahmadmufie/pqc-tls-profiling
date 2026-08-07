@@ -4,3 +4,8 @@
 export OSSL_HOME="/opt/openssl-3.5.5"
 export PATH="${OSSL_HOME}/bin:${PATH}"
 export LD_LIBRARY_PATH="${OSSL_HOME}/lib64:${LD_LIBRARY_PATH:-}"
+
+# Aktifkan virtualenv Python sekaligus (supaya satu `source env.sh` cukup)
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/.venv/bin/activate" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/.venv/bin/activate"
+fi
