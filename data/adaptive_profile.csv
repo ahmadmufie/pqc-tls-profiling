@@ -1,0 +1,8 @@
+min_load_konkuren,algorithm,mitigation,measured_max_concurrent,anomali
+1,ML-DSA-44,none,1200,tidak
+200,ML-DSA-44,none,1200,tidak
+600,ML-DSA-44,none,1200,tidak
+1200,ML-DSA-44,none,1200,tidak
+1800,ML-DSA-44,resumption,5000,tidak
+2500,ML-DSA-44,resumption,5000,tidak
+5000,ML-DSA-44,resumption,5000,tidak
