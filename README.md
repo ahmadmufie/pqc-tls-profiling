@@ -45,7 +45,10 @@ make ringkasan
 ```
 
 Jalankan `make help` untuk daftar lengkap perintah beserta variabel opsional
-(`PAKSA=1`, `HANYA=<algo>`, `CEPAT=1`, `RINCI=1`).
+(`PAKSA=1`, `ALGO=<algo>` untuk target server TLS, `CEPAT=1`, `RINCI=1`).
+`HANYA=<algo>` TIDAK berlaku untuk `sertifikat`/`benchmark-crypto` -- kedua skrip itu
+selalu memproses ke-6 algoritma sekaligus dan tidak punya opsi filter algoritma
+(lihat DOCS.md bagian "Verifikasi Antarmuka CLI").
 
 ## Struktur direktori
 

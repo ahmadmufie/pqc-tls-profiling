@@ -51,6 +51,22 @@
    "jenuh". Perlu disebutkan sebagai keterbatasan (threat to validity) di bab
    metodologi/analisis, bukan disembunyikan.
 
+## Verifikasi Antarmuka CLI Tiap Skrip (FR-10)
+
+Dikonfirmasi langsung lewat `--help` pada 2026-08-09 supaya `Makefile` tidak berasumsi
+salah soal argumen yang diterima tiap skrip:
+
+| Skrip                    | Argumen CLI terkonfirmasi                                   | Catatan |
+|---------------------------|--------------------------------------------------------------|---------|
+| `gen_pki.py`               | **Tidak ada.** Argumen (termasuk `--help`) diabaikan sepenuhnya. | Selalu membangun ke-6 hierarki sekaligus dalam satu run; tidak bisa memilih satu algoritma tanpa mengubah kode skrip. |
+| `bench_crypto.py`          | `--trials`, `--out`                                           | Tidak ada `--algos` -- selalu membenchmark ke-6 algoritma sekaligus. |
+| `tls_client_bench.py`      | `--trials`, `--algos {...}`, `--out`                          | Sesuai asumsi Makefile. |
+| `mitigation_pruning.py`    | `--trials`, `--algos {...}`, `--modes {full,no-root,leaf-only}`, `--out` | Sesuai asumsi Makefile. |
+| `capacity_model.py`        | `--algos {...}`, `--mitigations {none,resumption}`, `--levels`, `--out` | Sesuai asumsi Makefile. |
+
+`Makefile` sudah diperbarui agar tidak lagi menawarkan `HANYA=<algo>` pada target
+`sertifikat` dan `benchmark-crypto`, karena kedua skrip itu tidak mendukungnya.
+
 ## Troubleshooting
 
 - **Muncul prompt `[sudo] password for ...` di akhir run**: `tls_client_bench.py`

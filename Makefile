@@ -11,7 +11,7 @@ ALGO   ?= mldsa44
 VBOSE  := $(if $(RINCI),-x,)
 
 .PHONY: help persiapan \
-        sertifikat _sertifikat-satu validasi-rantai ukuran-sertifikat \
+        sertifikat validasi-rantai ukuran-sertifikat \
         benchmark-crypto \
         server-mulai server-status server-stop handshake \
         mitigasi \
@@ -26,17 +26,15 @@ help:
 	@echo "  make persiapan                 cek openssl, oqs-provider, port kosong, struktur folder"
 	@echo ""
 	@echo "MEMBUAT & MEMERIKSA SERTIFIKAT"
-	@echo "  make sertifikat                bangun 6 hierarki PKI yang belum ada"
+	@echo "  make sertifikat                bangun 6 hierarki PKI (gen_pki.py selalu membangun ke-6 sekaligus, tidak bisa satu per satu)"
 	@echo "  make sertifikat PAKSA=1        bangun ulang SEMUA hierarki dari nol"
-	@echo "  make sertifikat HANYA=mldsa44  bangun salah satu hierarki"
-	@echo "  make sertifikat RINCI=1        tampilkan tiap perintah yang dijalankan"
+	@echo "  make sertifikat RINCI=1        tampilkan tiap perintah shell yang dijalankan (bash -x)"
 	@echo "  make validasi-rantai           validasi rantai sertifikat"
 	@echo "  make ukuran-sertifikat         ukur ukuran tiap komponen sertifikat"
 	@echo ""
 	@echo "BENCHMARK KRIPTOGRAFI"
-	@echo "  make benchmark-crypto              keygen/sign/verify, $(TRIAL) trial (data resmi)"
+	@echo "  make benchmark-crypto              keygen/sign/verify SEMUA algoritma sekaligus, $(TRIAL) trial (data resmi)"
 	@echo "  make benchmark-crypto CEPAT=1       versi cepat ($(CTRIAL) trial) untuk demo, ke /tmp"
-	@echo "  make benchmark-crypto HANYA=mldsa44 satu algoritma saja"
 	@echo ""
 	@echo "SERVER & HANDSHAKE TLS"
 	@echo "  make server-mulai ALGO=mldsa44  nyalakan server TLS di background (demo manual s_client)"
@@ -86,26 +84,22 @@ persiapan:
 
 # ---------- SERTIFIKAT (FR-1, FR-2, FR-3) ----------
 
+# DIKONFIRMASI 2026-08-09 lewat `python3 src/gen_pki.py --help`: skrip ini TIDAK memproses
+# argumen CLI sama sekali (bahkan --help langsung menjalankan generate penuh, bukan menampilkan
+# help). Setiap run selalu membangun ke-6 hierarki sekaligus; tidak ada cara memilih satu
+# algoritma tanpa memodifikasi gen_pki.py itu sendiri. HANYA= karena itu dihapus dari target ini.
 sertifikat:
-ifdef HANYA
-	$(MAKE) _sertifikat-satu ALGO=$(HANYA)
-else
-	for a in $(ALGOS); do $(MAKE) _sertifikat-satu ALGO=$$a; done
-endif
-
-# ASUMSI: gen_pki.py menerima --algo <nama> dan --verbose. Perlu diverifikasi.
-_sertifikat-satu:
 	source env.sh
 ifdef PAKSA
-	echo "  [ulang]  pki/$(ALGO) (PAKSA=1)"
-	rm -rf pki/$(ALGO)
-	bash $(VBOSE) -c "python3 src/gen_pki.py --algo $(ALGO) $(if $(RINCI),--verbose,)"
+	echo "  [ulang] membangun ulang SEMUA hierarki PKI dari nol (PAKSA=1)"
+	rm -rf pki
+	bash $(VBOSE) -c "python3 src/gen_pki.py"
 else
-	if [ -f pki/$(ALGO)/leaf.crt ]; then \
-		echo "  [lewati] pki/$(ALGO) sudah ada (pakai PAKSA=1 untuk membangun ulang)"; \
+	if [ -f pki/mldsa44/leaf.crt ] && [ -f pki/ecc-p521/leaf.crt ]; then \
+		echo "  [lewati] PKI sudah lengkap (pakai PAKSA=1 untuk membangun ulang)"; \
 	else \
-		echo "  [bangun] pki/$(ALGO)"; \
-		bash $(VBOSE) -c "python3 src/gen_pki.py --algo $(ALGO) $(if $(RINCI),--verbose,)"; \
+		echo "  [bangun] semua hierarki PKI"; \
+		bash $(VBOSE) -c "python3 src/gen_pki.py"; \
 	fi
 endif
 
@@ -116,13 +110,15 @@ ukuran-sertifikat:
 	source env.sh && python3 src/x509_inspect.py
 
 # ---------- BENCHMARK KRIPTOGRAFI (FR-4) ----------
-# ASUMSI: bench_crypto.py menerima --trials, --algos, --out.
+# DIKONFIRMASI 2026-08-09 lewat `python3 src/bench_crypto.py --help`: hanya ada --trials dan
+# --out. Tidak ada --algos -- setiap run selalu membenchmark ke-6 algoritma sekaligus, jadi
+# HANYA= dihapus dari target ini.
 
 benchmark-crypto:
 ifdef CEPAT
-	source env.sh && python3 src/bench_crypto.py --trials $(CTRIAL) $(if $(HANYA),--algos $(HANYA),) --out /tmp/demo_bench.csv
+	source env.sh && python3 src/bench_crypto.py --trials $(CTRIAL) --out /tmp/demo_bench.csv
 else
-	source env.sh && python3 src/bench_crypto.py --trials $(TRIAL) $(if $(HANYA),--algos $(HANYA),)
+	source env.sh && python3 src/bench_crypto.py --trials $(TRIAL) --out data/raw/bench_crypto.csv
 endif
 
 # ---------- SERVER & HANDSHAKE (FR-5, FR-6) ----------
@@ -187,7 +183,7 @@ kapasitas-penuh:
 
 # ---------- DEMO & RINGKASAN ----------
 
-demo:
+demo: sertifikat
 	source env.sh
 	echo ">>> [1/4] Benchmark kripto mini (FR-4)"
 	python3 src/bench_crypto.py --trials 3 --out /tmp/demo_bench.csv
