@@ -465,6 +465,79 @@ def bench_resumed(openssl: str, algo: str, trials: int, run_id: str) -> list[dic
     return rows
 
 
+def demo_handshake(openssl: str, algo: str) -> None:
+    """Jalankan satu handshake TLS 1.3 nyata dan tampilkan tahapannya secara
+    natural di terminal, mengikuti urutan pada Gambar 3.3 (Bab III 3.4.2):
+    client hello -> server hello + rantai sertifikat -> ukuran on-the-wire ->
+    parsing struktural & jalur kepercayaan -> verifikasi tanda tangan ->
+    keputusan lanjut/batal -> catat hasil."""
+    port = PORTS[algo]
+    root_crt = PKI_DIR / algo / "root.crt"
+    algo_name = DISPLAY[algo][0]
+    print(f"\n--- Demo handshake TLS 1.3: {algo_name} ({algo}) ---")
+    server = start_server(algo, 1)
+    time.sleep(1)
+    try:
+        print("  klien mengirim client hello")
+        cmd = [
+            openssl,
+            "s_client",
+            "-connect",
+            f"localhost:{port}",
+            "-tls1_3",
+            "-CAfile",
+            str(root_crt),
+            "-showcerts",
+        ]
+        before = read_lo_bytes()
+        t0 = time.perf_counter()
+        proc = subprocess.run(cmd, input=b"Q\n", capture_output=True, timeout=15)
+        wall_ms = (time.perf_counter() - t0) * 1000.0
+        after = read_lo_bytes()
+        hs_bytes = after - before
+        out = proc.stdout.decode(errors="replace") + proc.stderr.decode(errors="replace")
+        lines = out.splitlines()
+
+        print("  server membalas server hello, encryptedextensions, dan rantai sertifikat")
+        for line in lines:
+            stripped = line.strip()
+            if (
+                "Certificate chain" in stripped
+                or " s:" in f" {stripped}"
+                or " i:" in f" {stripped}"
+                or stripped.startswith(("s:", "i:"))
+            ):
+                print(f"    {stripped}")
+
+        print(f"  ukuran byte on-the-wire (selisih counter kernel /proc/net/dev): {hs_bytes} byte")
+
+        print(
+            "  klien mem-parsing sertifikat DER (validasi struktural) dan "
+            "membangun jalur kepercayaan leaf -> intermediate -> root"
+        )
+
+        verify_line = next(
+            (l.strip() for l in lines if "Verify return code" in l),
+            "Verify return code: tidak ditemukan",
+        )
+        print("  klien memverifikasi tanda tangan digital tiap tautan (verifikasi kriptografis)")
+        print(f"    {verify_line}")
+
+        session_reused = "Reused, TLSv1.3" in out
+        session_new = "New, TLSv1.3" in out
+        if "Verify return code: 0" in out and (session_new or session_reused):
+            print(
+                "  tautan valid dan tanda tangan sah -> handshake berlanjut ke "
+                "Certificate Verify hingga Finished, sesi terbentuk"
+            )
+        else:
+            print("  tautan tidak valid atau tanda tangan tidak sah -> handshake dibatalkan, koneksi ditolak")
+
+        print(f"  mencatat hasil: latensi={wall_ms:.2f}ms, ukuran on-the-wire={hs_bytes} byte")
+    finally:
+        stop_server(server)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--trials", type=int, default=100)
@@ -479,11 +552,22 @@ def main() -> None:
         type=Path,
         default=PROJECT_ROOT / "data" / "raw" / "tls_handshake_bench.csv",
     )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Jalankan 1 handshake nyata per algoritma dengan narasi tahapan (Gambar 3.3), "
+        "tanpa menjalankan benchmark 100x dan tanpa menulis CSV.",
+    )
     args = parser.parse_args()
 
     openssl = shutil.which("openssl")
     if not openssl:
         raise SystemExit("FATAL: openssl tidak ditemukan. Jalankan source env.sh dulu.")
+
+    if args.demo:
+        for algo in args.algos:
+            demo_handshake(openssl, algo)
+        return
 
     print("Meminta izin sudo (dipakai tshark untuk pcap contoh saja)...")
     subprocess.run(["sudo", "-v"], check=True)

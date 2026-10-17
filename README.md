@@ -44,6 +44,11 @@ make kapasitas-penuh   # FR-9: data/capacity_profile.csv (~18 menit)
 make ringkasan
 ```
 
+```bash
+make kapasitas-pruning ALGO=mldsa44   # FR-9 lanjutan: kapasitas dgn chain pruning & kombinasi
+make profil-bertahap ALGO=mldsa44     # FR-9 lanjutan: profil adaptif bertahap (temuan utama adaptivitas)
+```
+
 Jalankan `make help` untuk daftar lengkap perintah beserta variabel opsional
 (`PAKSA=1`, `ALGO=<algo>` untuk target server TLS, `CEPAT=1`, `RINCI=1`).
 `HANYA=<algo>` TIDAK berlaku untuk `sertifikat`/`benchmark-crypto` -- kedua skrip itu
@@ -54,11 +59,28 @@ selalu memproses ke-6 algoritma sekaligus dan tidak punya opsi filter algoritma
 
 ```
 pki/{mldsa44,mldsa65,mldsa87,ecc-p256,ecc-p384,ecc-p521}/   hierarki sertifikat per algoritma
-src/                          semua skrip pipeline
+src/                          semua skrip pipeline (lihat daftar di bawah)
 data/raw/                     CSV mentah per FR (gitignored)
 data/results.csv              dataset resmi terkonsolidasi (FR-8)
-data/capacity_profile.csv     hasil load test kapasitas (FR-9)
+data/capacity_profile.csv     kapasitas resmi M5 (FR-9, none+resumption, 12 baris)
+data/capacity_profile_pruning_<ALGO>.csv   kapasitas dgn chain_pruning & kombinasi, per algoritma (make kapasitas-pruning ALGO=...)
+data/adaptive_capacity_staged_<algo>.csv   profil adaptif bertahap per algoritma (make profil-bertahap, FR-9 lanjutan)
 docs/                         dokumen pendukung
+```
+
+```
+src/
+├── gen_pki.py                    FR-1: generate 6 hierarki PKI
+├── x509_inspect.py                FR-3: ukuran komponen sertifikat
+├── chain_validation.sh             FR-2: validasi rantai kepercayaan
+├── bench_crypto.py                FR-4: benchmark keygen/sign/verify
+├── tls_server.py / tls_client_bench.py   FR-5, FR-6: handshake TLS 1.3 nyata + resumption
+├── mitigation_pruning.py          FR-7: chain pruning
+├── consolidate_results.py         FR-8: gabungkan ke data/results.csv
+├── capacity_model.py              FR-9: model + load test kapasitas
+├── staged_adaptive_capacity.py    FR-9 lanjutan: profil adaptif bertahap (lihat `make profil-bertahap`)
+├── report_summary.py              cetak ringkasan dari data resmi
+└── diagnose_capacity_env.sh       diagnostik manual (ulimit/port/TIME_WAIT), tanpa target make
 ```
 
 ## Peringatan penting

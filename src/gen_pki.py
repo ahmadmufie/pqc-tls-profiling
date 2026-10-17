@@ -37,7 +37,7 @@ VALIDITY_DAYS = {"root": 3650, "intermediate": 1825, "leaf": 365}
 
 
 def run(cmd: list[str]) -> None:
-    print(f"  $ {' '.join(cmd)}")
+    print(f"    $ {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         print(result.stdout)
@@ -45,6 +45,14 @@ def run(cmd: list[str]) -> None:
         raise SystemExit(
             f"FATAL: command gagal (exit {result.returncode}): {' '.join(cmd)}"
         )
+
+
+def fsize(path: Path) -> str:
+    try:
+        n = path.stat().st_size
+    except FileNotFoundError:
+        return "TIDAK ADA"
+    return f"{n:,} bytes".replace(",", ".")
 
 
 def assert_openssl_supports_mldsa() -> str:
@@ -92,8 +100,10 @@ def genkey(openssl: str, algo_code: str, key_path: Path) -> None:
 def make_root(openssl: str, algo_code: str, out_dir: Path) -> None:
     key = out_dir / "root.key"
     crt = out_dir / "root.crt"
+    print("\nmembangkitkan kunci root\n")
     genkey(openssl, algo_code, key)
     subject = f"/C=ID/O=PQC-TLS-Thesis/OU=Root-CA/CN=Root-CA-{algo_code}"
+    print(f"\nmenerbitkan sertifikat root, self-signed, {VALIDITY_DAYS['root']} hari\n")
     run([
         openssl,
         "req",
@@ -112,6 +122,7 @@ def make_root(openssl: str, algo_code: str, out_dir: Path) -> None:
         "-addext",
         "keyUsage=critical,keyCertSign,cRLSign",
     ])
+    print(f"    -> {crt} ({fsize(crt)})")
 
 
 def make_intermediate(openssl: str, algo_code: str, out_dir: Path) -> None:
@@ -121,8 +132,10 @@ def make_intermediate(openssl: str, algo_code: str, out_dir: Path) -> None:
     root_key = out_dir / "root.key"
     root_crt = out_dir / "root.crt"
     ext_file = out_dir / "intermediate.ext"
+    print("\nmembangkitkan kunci intermediate\n")
     genkey(openssl, algo_code, key)
     subject = f"/C=ID/O=PQC-TLS-Thesis/OU=Intermediate-CA/CN=Intermediate-CA-{algo_code}"
+    print("\nmembuat CSR intermediate\n")
     run([openssl, "req", "-new", "-key", str(key), "-out", str(csr), "-subj", subject])
 
     # WAJIB: basicConstraints CA:TRUE, kalau tidak openssl verify menolak
@@ -131,6 +144,7 @@ def make_intermediate(openssl: str, algo_code: str, out_dir: Path) -> None:
         "basicConstraints=critical,CA:TRUE,pathlen:0\n"
         "keyUsage=critical,keyCertSign,cRLSign\n"
     )
+    print(f"\n menandatangani CSR intermediate dengan root.key, pathlen:0, {VALIDITY_DAYS['intermediate']} hari\n")
     run([
         openssl,
         "x509",
@@ -149,6 +163,7 @@ def make_intermediate(openssl: str, algo_code: str, out_dir: Path) -> None:
         "-extfile",
         str(ext_file),
     ])
+    print(f"    -> {crt} ({fsize(crt)}), ditandatangani dengan {root_key.name} oleh Root CA")
 
 
 def make_leaf(openssl: str, algo_code: str, out_dir: Path) -> None:
@@ -158,8 +173,10 @@ def make_leaf(openssl: str, algo_code: str, out_dir: Path) -> None:
     inter_key = out_dir / "intermediate.key"
     inter_crt = out_dir / "intermediate.crt"
     ext_file = out_dir / "leaf.ext"
+    print("\nmembangkitkan kunci leaf\n")
     genkey(openssl, algo_code, key)
     subject = "/C=ID/O=PQC-TLS-Thesis/OU=Leaf/CN=localhost"
+    print("\nmembuat CSR leaf\n")
     run([openssl, "req", "-new", "-key", str(key), "-out", str(csr), "-subj", subject])
 
     # Leaf: bukan CA. subjectAltName wajib untuk trust hostname modern.
@@ -169,6 +186,7 @@ def make_leaf(openssl: str, algo_code: str, out_dir: Path) -> None:
         "extendedKeyUsage=serverAuth\n"
         "subjectAltName=DNS:localhost,IP:127.0.0.1\n"
     )
+    print(f"\nmenandatangani CSR leaf dengan intermediate.key, CA:FALSE + SAN, {VALIDITY_DAYS['leaf']} hari\n")
     run([
         openssl,
         "x509",
@@ -187,19 +205,41 @@ def make_leaf(openssl: str, algo_code: str, out_dir: Path) -> None:
         "-extfile",
         str(ext_file),
     ])
+    print(f"    -> {crt} ({fsize(crt)}), ditandatangani dengan {inter_key.name} oleh Intermediate CA")
+
+    print("\nmenyusun rantai leaf + intermediate\n")
+    chain = out_dir / "leaf-chain.crt"
+    chain.write_text(crt.read_text() + inter_crt.read_text())
+    print(f"    -> {chain} ({fsize(chain)}) = leaf.crt + intermediate.crt")
 
 
 def main() -> None:
     openssl = assert_openssl_supports_mldsa()
-    for algo_code in ALGORITHMS:
+    total = len(ALGORITHMS)
+    print("=" * 72)
+    print(" \nMembangun 6 hierarki PKI (root -> intermediate -> leaf)\n")
+    print("=" * 72)
+    for i, algo_code in enumerate(ALGORITHMS, start=1):
         out_dir = PKI_DIR / algo_code
-        print(f"\n=== Hierarki: {algo_code} ===")
+        openssl_alg, _ = ALGORITHMS[algo_code]
+        print(f"\n--- Hierarki {i}/{total}: {algo_code} ({openssl_alg}) ---\n")
         make_root(openssl, algo_code, out_dir)
         make_intermediate(openssl, algo_code, out_dir)
         make_leaf(openssl, algo_code, out_dir)
-        print(f"OK: {algo_code} -> {out_dir}")
+        print(f"  OK: hierarki {algo_code} lengkap -> {out_dir}")
+
+    print("\n" + "=" * 72)
+    print(" Ringkasan")
+    print("=" * 72)
+    header = f"{'algoritma':<10} {'root.crt':>12} {'intermediate.crt':>18} {'leaf.crt':>12} {'leaf-chain.crt':>16}"
+    print(header)
+    print("-" * len(header))
+    for algo_code in ALGORITHMS:
+        out_dir = PKI_DIR / algo_code
+        row = f"{algo_code:<10} {fsize(out_dir / 'root.crt'):>12} {fsize(out_dir / 'intermediate.crt'):>18} {fsize(out_dir / 'leaf.crt'):>12} {fsize(out_dir / 'leaf-chain.crt'):>16}"
+        print(row)
     print("\nSemua 6 hierarki selesai di-generate.")
-    print("Verifikasi (openssl verify) dilakukan di langkah terpisah, bukan di skrip ini.")
+    print("Verifikasi rantai (openssl verify) dilakukan terpisah oleh src/chain_validation.sh (make validasi-rantai).")
 
 
 if __name__ == "__main__":

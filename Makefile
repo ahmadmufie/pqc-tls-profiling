@@ -16,7 +16,7 @@ VBOSE  := $(if $(RINCI),-x,)
         server-mulai server-status server-stop handshake \
         mitigasi \
         gabung \
-        kapasitas kapasitas-penuh \
+        kapasitas kapasitas-penuh kapasitas-pruning profil-bertahap \
         demo ringkasan \
         bersihkan
 
@@ -52,7 +52,13 @@ help:
 	@echo ""
 	@echo "KAPASITAS SERVER / LOAD TEST"
 	@echo "  make kapasitas ALGO=mldsa44     uji kapasitas 1 algoritma, skala mini, ke /tmp"
-	@echo "  make kapasitas-penuh            uji kapasitas 12 kombinasi penuh (~18 menit, data resmi)"
+	@echo "  make kapasitas-penuh            uji kapasitas 12 kombinasi resmi M5 (none+resumption, ~18 menit)"
+	@echo "  make kapasitas-pruning ALGO=mldsa44   TAMBAHAN: kapasitas dgn chain_pruning & gabungan, 1 algoritma"
+	@echo "                                        (tulis ke data/capacity_profile_pruning_<ALGO>.csv --"
+	@echo "                                        jalankan per algoritma TIDAK saling menimpa)"
+	@echo ""
+	@echo "  make profil-bertahap ALGO=mldsa44      profil adaptif bertahap 1 algoritma -- ini PROFIL ADAPTIF resmi"
+	@echo "                                          penelitian (none->resumption/pruning->gabungan, empiris per algoritma)"
 	@echo ""
 	@echo "DEMO & RINGKASAN"
 	@echo "  make demo                       jalankan seluruh pipeline versi mini end-to-end (~2-3 menit)"
@@ -180,6 +186,33 @@ kapasitas-penuh:
 	source env.sh && ulimit -n 8192 && sudo -v
 	python3 src/capacity_model.py --levels 200 600 1200 1800 2500 3500 5000 \
 	  --out data/capacity_profile.csv
+
+# Tambahan pasca-M5: ukur kapasitas nyata dengan chain pruning ("no-root")
+# dan kombinasi resumption+chain_pruning. Disimpan terpisah dari
+# data/capacity_profile.csv resmi M5 supaya tidak menimpa data acuan lama.
+kapasitas-pruning:
+	source env.sh && ulimit -n 8192 && sudo -v
+	python3 src/capacity_model.py --algos $(ALGO) \
+	  --mitigations none resumption chain_pruning resumption+chain_pruning \
+	  --levels 200 600 1200 1800 2500 3500 5000 \
+	  --out data/capacity_profile_pruning_$(ALGO).csv
+	cat data/capacity_profile_pruning_$(ALGO).csv
+	@echo ""
+	@echo "  Catatan: file ini PER-ALGORITMA (nama menyertakan ALGO) supaya"
+	@echo "  menjalankan kapasitas-pruning untuk algoritma lain TIDAK menimpa"
+	@echo "  hasil algoritma sebelumnya. Jalankan target ini untuk tiap ALGO"
+	@echo "  yang dibutuhkan (mldsa44, mldsa65, mldsa87, ...), lalu lihat"
+	@echo "  semua file data/capacity_profile_pruning_*.csv untuk gabungan."
+
+# Profil adaptif BERTAHAP untuk 1 algoritma -- ini ADALAH "profil adaptif"
+# resmi penelitian: mulai dari batas 'none' yang sudah diketahui (dari
+# data/capacity_profile.csv), konfirmasi ulang, lalu naik mitigasi satu per
+# satu (bandingkan resumption vs chain_pruning secara EMPIRIS, bukan tebakan
+# urutan) sampai kombinasi gabungan kalau perlu. Lihat
+# src/staged_adaptive_capacity.py untuk detail algoritmanya.
+profil-bertahap:
+	source env.sh && ulimit -n 8192 && sudo -v
+	python3 src/staged_adaptive_capacity.py --algo $(ALGO)
 
 # ---------- DEMO & RINGKASAN ----------
 

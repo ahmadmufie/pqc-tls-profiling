@@ -13,6 +13,8 @@
 | M4        | FR-7  | `make mitigasi`          | `data/raw/chain_pruning_bench.csv`       |
 | M4        | FR-8  | `make gabung`            | `data/results.csv` (8418 baris)          |
 | M5        | FR-9  | `make kapasitas-penuh`   | `data/capacity_profile.csv` (12 baris)   |
+| M5+       | FR-9  | `make kapasitas-pruning ALGO=...` | `data/capacity_profile_pruning_<ALGO>.csv` (satu file per algoritma -- lihat catatan bug di bawah) |
+| M5+       | FR-9  | `make profil-bertahap`   | `data/adaptive_capacity_staged_<algo>.csv` (profil adaptif) |
 | M6        | -     | (manual, bab analisis)   | draf laporan                              |
 | -         | FR-10 | (manual, review)         | dokumentasi modul (file ini)             |
 
@@ -30,6 +32,17 @@
   CPU murni -- CPU saturasi teoretis (`est_max_concurrent`) berkisar 480-760,
   jauh di bawah beberapa `measured_max_concurrent` (2500-5000), karena
   `s_server` tanpa `-multi` bersifat serial per koneksi.
+- **Profil adaptif bertahap (FR-9 lanjutan, `make profil-bertahap`)**: untuk
+  tiap algoritma, `staged_adaptive_capacity.py` mengonfirmasi ulang batas
+  kapasitas mitigasi `none` secara empiris, lalu menaikkan mitigasi
+  (`resumption` vs `chain_pruning`, dibandingkan langsung, bukan tebakan
+  urutan) sampai kombinasi gabungan bila perlu. Ini ADALAH profil adaptif
+  resmi penelitian: rekomendasi algoritma+mitigasi disusun per level beban
+  berdasarkan data ukur nyata, bukan model statis atau daemon runtime.
+  Temuan utamanya: adaptivitas yang benar-benar berdampak pada kapasitas ada
+  di level MITIGASI (session resumption / chain pruning), bukan di level
+  pemilihan algoritma tanda tangan -- lihat hasil per-algoritma di
+  `data/adaptive_capacity_staged_<algo>.csv`.
 
 ## Anomali yang perlu dijelaskan saat sidang (sudah tereproduksi 2x, bukan artefak)
 
@@ -63,6 +76,7 @@ salah soal argumen yang diterima tiap skrip:
 | `tls_client_bench.py`      | `--trials`, `--algos {...}`, `--out`                          | Sesuai asumsi Makefile. |
 | `mitigation_pruning.py`    | `--trials`, `--algos {...}`, `--modes {full,no-root,leaf-only}`, `--out` | Sesuai asumsi Makefile. |
 | `capacity_model.py`        | `--algos {...}`, `--mitigations {none,resumption}`, `--levels`, `--out` | Sesuai asumsi Makefile. |
+| `diagnose_capacity_env.sh` | **Tidak ada.** | Diagnostik read-only manual (ulimit, rentang port, TIME_WAIT, CPU/load) -- tidak punya target `make` sendiri. Jalankan langsung `bash src/diagnose_capacity_env.sh` kalau hasil `kapasitas-*`/`profil-bertahap` terlihat janggal (lihat Troubleshooting). |
 
 `Makefile` sudah diperbarui agar tidak lagi menawarkan `HANYA=<algo>` pada target
 `sertifikat` dan `benchmark-crypto`, karena kedua skrip itu tidak mendukungnya.

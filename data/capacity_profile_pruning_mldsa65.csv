@@ -1,0 +1,5 @@
+algorithm,mitigation,server_cores,est_max_concurrent,measured_max_concurrent,cpu_percent_at_saturation,avg_latency_ms_at_saturation
+ML-DSA-65,none,8,537.5,600,51.69,986.45
+ML-DSA-65,resumption,8,594.81,5000,79.94,243.52
+ML-DSA-65,chain_pruning,8,551.17,600,59.15,767.2
+ML-DSA-65,resumption+chain_pruning,8,,5000,81.85,255.72
